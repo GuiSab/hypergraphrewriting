@@ -114,10 +114,14 @@ where
     -- | Unsafe constructor of 'Hypergraph', does not check the 'Hypergraph' structure.
     unsafeHypergraph :: Set n -> Set (Hyperedge n e s) -> Hypergraph n e s
     unsafeHypergraph n e = Hypergraph{vertices=n, hyperedges=e}
+    
+
+    
 
     data HypergraphMorphism n e s = HypergraphMorphism {
                                    onvertices :: Map n n,
-                                   onhyperedges :: Map e e
+                                   onhyperedges :: Map (Hyperedge n e s) (Hyperedge n e s),
+                                   targetHypergraph :: Hypergraph n e s
                                    } deriving (Eq, Generic, PrettyPrint, Simplifiable)
 
     data HypergraphMorphismError n e s = IncompatibleSource (Hyperedge n e s)
@@ -127,18 +131,23 @@ where
                                        | MissingVertex n
                                        deriving (Eq, Show, Generic, PrettyPrint)
 
-    hypermorphism :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> Hypergraph n e s -> Map n n -> Map (Hyperedge n e s) (Hyperedge n e s) -> Either (HypergraphMorphismError n e s) (HypergraphMorphism ne s)
-    hypermorphism h h' onns ones
-        | not $ Set.null $ incoherentSources = Left $ curry $ curry IncompatibleSource $ anElement incoherentSources
-        | not $ Set.null $ incoherentTargets = Left $ curry $ curry IncompatibleTarget $ anElement incoherentTargets
-        | not $ Set.null $ incoherentLabels  = Left $ curry $ curry IncompatibleLabels $ anElement incoherentLabels
-        | not $ Set.null $ missingEdges      = Left $ curry $ curry MissingEdge        $ anElement missingEdges
-        | not $ Set.null $ missingVertices   = Left $ curry $ curry MissingVertex      $ anElement missingVertices
-        | otherwise = Right HypergraphMorphism{onvertices=onns, onhyperedges=ones}
+    -- | Smart constructor for 'HypergraphMorphism'.
+    hypergraphMorphism :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> Hypergraph n e s -> Map n n -> Map (Hyperedge n e s) (Hyperedge n e s) -> Either (HypergraphMorphismError n e s) (HypergraphMorphism n e s)
+    hypergraphMorphism h h' onns ones
+        | not $ Set.null $ incoherentSources = Left $ IncompatibleSource $ anElement incoherentSources
+        | not $ Set.null $ incoherentTargets = Left $ IncompatibleTarget $ anElement incoherentTargets
+        | not $ Set.null $ incoherentLabels  = Left $ IncompatibleLabels $ anElement incoherentLabels
+        | not $ Set.null $ missingEdges      = Left $ MissingEdge        $ anElement missingEdges
+        | not $ Set.null $ missingVertices   = Left $ MissingVertex      $ anElement missingVertices
+        | otherwise = Right HypergraphMorphism{onvertices=onns, onhyperedges=ones, targetHypergraph = h'}
         where
-            incoherentSources = [e | e <- keys ones, map ((!) . onns) (sourceHyperedge e) /= sourceHyperedge (ones ! e)]
-            incoherentTargets = [e | e <- keys ones, map ((!) . onns) (targetHyperedge e) /= targetHyperedge (ones ! e)]
-            incoherentLabels  = [e | e <- keys ones, labelHyperedge e /= labelHyperedge (ones ! e)]
-            missingEdges      = (hyperedges h) |-| keys ones
-            missingVertices   = (vertices h) |-| keys onns
+            incoherentSources = [e | e <- keys' ones, ((onns |!|) <$> (sourceHyperedge e)) /= sourceHyperedge (ones |!| e)]
+            incoherentTargets = [e | e <- keys' ones, ((onns |!|) <$> (targetHyperedge e)) /= targetHyperedge (ones |!| e)]
+            incoherentLabels  = [e | e <- keys' ones, labelHyperedge e /= labelHyperedge (ones |!| e)]
+            missingEdges      = (hyperedges h) |-| keys' ones
+            missingVertices   = (vertices h) |-| keys' onns
         
+
+
+    unsafeHypergraphMorphism :: Hypergraph n e s -> Hypergraph n e s -> Map n n -> Map (Hyperedge n e s) (Hyperedge n e s) -> HypergraphMorphism n e s
+    unsafeHypergraphMorphism h h' onns ones = HypergraphMorphism{onvertices=onns, onhyperedges=ones, targetHypergraph = h'}
