@@ -16,3 +16,12 @@ main = do
     let h2 = hypergraph nodes (set [edge1,edge3])
     putStrLn $ show $ h1
     putStrLn $ show $ h2
+    let h = unsafeHypergraph nodes (set [edge1,edge3])
+    putStrLn $ show $ isMonogamous h
+    putStrLn $ show $ isAcyclic h
+    let nodes = set $ [0,1,2]
+    let edge1 = hyperedge 0 [0] [1] "f"
+    let edge2 = hyperedge 0 [1] [2] "g"
+    let h' = unsafeHypergraph nodes (set [edge1,edge2])
+    putStrLn $ show $ isMonogamous h'
+    putStrLn $ show $ isAcyclic h'

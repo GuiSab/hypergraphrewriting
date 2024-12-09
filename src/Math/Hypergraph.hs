@@ -31,6 +31,15 @@ module Math.Hypergraph
     HypergraphError(..),
     hypergraph,
     unsafeHypergraph,
+    -- ** Monogamous acyclic hypergraph
+    isMonogamous,
+    isAcyclic,
+    
+    -- * Hypergraph morphism
+    HypergraphMorphism,
+    hypergraphMorphism,
+    unsafeHypergraphMorphism,
+    HypergraphMorphismError(..),
 )
 
 where
@@ -115,7 +124,22 @@ where
     unsafeHypergraph :: Set n -> Set (Hyperedge n e s) -> Hypergraph n e s
     unsafeHypergraph n e = Hypergraph{vertices=n, hyperedges=e}
     
-
+    -- | A hypergraph is monogamous if no node has in or out degree bigger than 1.
+    isMonogamous :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> Bool
+    isMonogamous hg = Set.null $ ((indegree <$> vertices hg) ||| (outdegree <$> vertices hg)) |-| (set [0,1])
+        where
+            indegree n = sum [length [n | n' <- sourceHyperedge e, n' == n] | e <- Set.setToList $ hyperedges hg]
+            outdegree n = sum [length [n | n' <- sourceHyperedge e, n' == n] | e <- Set.setToList $ hyperedges hg]
+            
+    -- | A hypergraph is acyclic if it contains no cycle. A path is defined as a list of hyperedges e_i such that e_i has at least a target equal to a source of e_i+1.
+    isAcyclic :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> Bool
+    isAcyclic hg = Set.and $ dfs [] <$> vertices hg
+        where
+            dfs alreadyVisited currentNode
+                | currentNode `elem` alreadyVisited = False
+                | otherwise = Set.and $ [and $ dfs (currentNode : alreadyVisited) <$> targetHyperedge e | e <- hyperedges hg, currentNode `elem` sourceHyperedge e]
+                
+    
     
 
     data HypergraphMorphism n e s = HypergraphMorphism {
