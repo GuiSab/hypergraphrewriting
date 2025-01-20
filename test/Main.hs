@@ -1,15 +1,13 @@
 module Main (main) where
 
-import              Data.WeakSet         (Set)
-import qualified    Data.WeakSet       as Set
 import              Data.WeakSet.Safe
 import              Math.Hypergraph
 
 
 main :: IO ()
 main = do
-    let nodes = set $ [0,1,2]
-    let edge1 = hyperedge 0 [0,1] [1,2] "f"
+    let nodes = set $ [0,1,2 :: Int]
+    let edge1 = hyperedge (0  :: Int) [0,1] [1,2  :: Int] "f"
     let edge2 = hyperedge 0 [0,1] [1] "f"
     let edge3 = hyperedge 0 [0,1] [1] "g"
     let h1 = hypergraph nodes (set [edge1,edge2])
@@ -19,9 +17,9 @@ main = do
     let h = unsafeHypergraph nodes (set [edge1,edge3])
     putStrLn $ show $ isMonogamous h
     putStrLn $ show $ isAcyclic h
-    let nodes = set $ [0,1,2]
-    let edge1 = hyperedge 0 [0] [1] "f"
-    let edge2 = hyperedge 0 [1] [2] "g"
-    let h' = unsafeHypergraph nodes (set [edge1,edge2])
+    let nodes' = set $ [0,1,2 :: Int]
+    let edge1' = hyperedge (0 :: Int) [0] [1] "f"
+    let edge2' = hyperedge 0 [1] [2] "g"
+    let h' = unsafeHypergraph nodes' (set [edge1',edge2'])
     putStrLn $ show $ isMonogamous h'
     putStrLn $ show $ isAcyclic h'

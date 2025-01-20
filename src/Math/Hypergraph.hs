@@ -173,13 +173,22 @@ where
         
 
 
-    unsafeHypergraphMorphism :: Hypergraph n e s -> Hypergraph n e s -> Map n n -> Map (Hyperedge n e s) (Hyperedge n e s) -> HypergraphMorphism n e s
-    unsafeHypergraphMorphism h h' onns ones = HypergraphMorphism{onvertices=onns, onhyperedges=ones, targetHypergraph = h'}
+    unsafeHypergraphMorphism :: Map n n -> Map (Hyperedge n e s) (Hyperedge n e s) -> Hypergraph n e s -> HypergraphMorphism n e s
+    unsafeHypergraphMorphism onns ones thg = HypergraphMorphism{onvertices=onns, onhyperedges=ones, targetHypergraph = thg}
+
+    instance (Show s, Show n, Show e) => Show (HypergraphMorphism n e s) where
+        show hgh = "(unsafeHypergraphMorphism "++(show $ onvertices hgh)++" "++(show $ onhyperedges hgh)++ " " ++ (show $ targetHypergraph hgh) ++")"
     
     
     -- | The category of finite hypergraphs on a given signature.
     data FinHyp n e s = FinHyp deriving (Eq, Show, Generic, PrettyPrint, Simplifiable)
-        
+    
+    instance (Eq n, Eq e, Eq s) => Morphism (HypergraphMorphism n e s) (Hypergraph n e s) where
+        source hgh = Hypergraph {vertices = (domain.onvertices) hgh, hyperedges = (domain.onhyperedges) hgh}
+        target = targetHypergraph
+        (@) hgh2 hgh1 =  HypergraphMorphism {onvertices = (onvertices hgh2) |.| (onvertices hgh1), onhyperedges = (onhyperedges hgh2) |.| (onhyperedges hgh1), targetHypergraph = target hgh2}
+    
+    
     instance (Eq n, Eq e, Eq s) => Category (FinHyp n e s) (HypergraphMorphism n e s) (Hypergraph n e s) where
         identity _ hg = HypergraphMorphism {onvertices = (idFromSet.vertices) hg, onhyperedges = (idFromSet.hyperedges) hg, targetHypergraph = hg}
         ar _ s t = snd $ Set.catEither [hypergraphMorphism s t onv one | onv <- onvMaps, one <- oneMaps]
@@ -187,4 +196,9 @@ where
                 onvMaps = Map.enumerateMaps (vertices s) (vertices t)
                 oneMaps = Map.enumerateMaps (hyperedges s) (hyperedges t)
     
+    data RewriteRule n e s = RewriteRule {
+                                    leftInjection
+                                }
     
+    
+    -- enumeratePreCriticalPairs :: 
