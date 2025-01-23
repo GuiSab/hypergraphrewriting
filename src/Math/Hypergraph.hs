@@ -31,15 +31,22 @@ module Math.Hypergraph
     HypergraphError(..),
     hypergraph,
     unsafeHypergraph,
-    -- ** Monogamous acyclic hypergraph
-    isMonogamous,
-    isAcyclic,
     
     -- * Hypergraph morphism
     HypergraphMorphism,
     hypergraphMorphism,
     unsafeHypergraphMorphism,
     HypergraphMorphismError(..),
+    
+    -- ** MA-Cospan
+    isMonogamous,
+    isAcyclic,
+    MACospan,
+    MACospanError(..),
+    maCospan,
+    unsafeMACospan,
+    
+
 )
 
 where
@@ -58,7 +65,7 @@ where
     import              GHC.Generics
 
     
-    
+    -- HYPERGRAPHS
     
     -- | An 'Hyperedge' is composed of a label in a signature 's', a list of source vertices, a list of target vertices and a hyperedge identifier.
     data Hyperedge n e s = Hyperedge{
@@ -124,27 +131,15 @@ where
     unsafeHypergraph :: Set n -> Set (Hyperedge n e s) -> Hypergraph n e s
     unsafeHypergraph n e = Hypergraph{vertices=n, hyperedges=e}
     
-    -- | A hypergraph is monogamous if no node has in or out degree bigger than 1.
-    isMonogamous :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> Bool
-    isMonogamous hg = Set.null $ ((indegree <$> vertices hg) ||| (outdegree <$> vertices hg)) |-| (set [0,1])
-        where
-            indegree n = sum [length [n | n' <- sourceHyperedge e, n' == n] | e <- Set.setToList $ hyperedges hg]
-            outdegree n = sum [length [n | n' <- sourceHyperedge e, n' == n] | e <- Set.setToList $ hyperedges hg]
-            
-    -- | A hypergraph is acyclic if it contains no cycle. A path is defined as a list of hyperedges e_i such that e_i has at least a target equal to a source of e_i+1.
-    isAcyclic :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> Bool
-    isAcyclic hg = Set.and $ dfs [] <$> vertices hg
-        where
-            dfs alreadyVisited currentNode
-                | currentNode `elem` alreadyVisited = False
-                | otherwise = Set.and $ [and $ dfs (currentNode : alreadyVisited) <$> targetHyperedge e | e <- hyperedges hg, currentNode `elem` sourceHyperedge e]
-                
+    
+    
+    -- HYPERGRAPH MORPHISMS
     
     
 
     data HypergraphMorphism n e s = HypergraphMorphism {
-                                   onvertices :: Map n n,
-                                   onhyperedges :: Map (Hyperedge n e s) (Hyperedge n e s),
+                                   onVertices :: Map n n,
+                                   onHyperedges :: Map (Hyperedge n e s) (Hyperedge n e s),
                                    targetHypergraph :: Hypergraph n e s
                                    } deriving (Eq, Generic, PrettyPrint, Simplifiable)
 
@@ -163,7 +158,7 @@ where
         | not $ Set.null $ incoherentLabels  = Left $ IncompatibleLabels $ anElement incoherentLabels
         | not $ Set.null $ missingEdges      = Left $ MissingEdge        $ anElement missingEdges
         | not $ Set.null $ missingVertices   = Left $ MissingVertex      $ anElement missingVertices
-        | otherwise = Right HypergraphMorphism{onvertices=onns, onhyperedges=ones, targetHypergraph = h'}
+        | otherwise = Right HypergraphMorphism{onVertices=onns, onHyperedges=ones, targetHypergraph = h'}
         where
             incoherentSources = [e | e <- keys' ones, ((onns |!|) <$> (sourceHyperedge e)) /= sourceHyperedge (ones |!| e)]
             incoherentTargets = [e | e <- keys' ones, ((onns |!|) <$> (targetHyperedge e)) /= targetHyperedge (ones |!| e)]
@@ -172,33 +167,116 @@ where
             missingVertices   = (vertices h) |-| keys' onns
         
 
-
     unsafeHypergraphMorphism :: Map n n -> Map (Hyperedge n e s) (Hyperedge n e s) -> Hypergraph n e s -> HypergraphMorphism n e s
-    unsafeHypergraphMorphism onns ones thg = HypergraphMorphism{onvertices=onns, onhyperedges=ones, targetHypergraph = thg}
+    unsafeHypergraphMorphism onns ones thg = HypergraphMorphism{onVertices=onns, onHyperedges=ones, targetHypergraph = thg}
 
     instance (Show s, Show n, Show e) => Show (HypergraphMorphism n e s) where
-        show hgh = "(unsafeHypergraphMorphism "++(show $ onvertices hgh)++" "++(show $ onhyperedges hgh)++ " " ++ (show $ targetHypergraph hgh) ++")"
+        show hgh = "(unsafeHypergraphMorphism "++(show $ onVertices hgh)++" "++(show $ onHyperedges hgh)++ " " ++ (show $ targetHypergraph hgh) ++")"
     
     
     -- | The category of finite hypergraphs on a given signature.
     data FinHyp n e s = FinHyp deriving (Eq, Show, Generic, PrettyPrint, Simplifiable)
     
     instance (Eq n, Eq e, Eq s) => Morphism (HypergraphMorphism n e s) (Hypergraph n e s) where
-        source hgh = Hypergraph {vertices = (domain.onvertices) hgh, hyperedges = (domain.onhyperedges) hgh}
+        source hgh = Hypergraph {vertices = (domain.onVertices) hgh, hyperedges = (domain.onHyperedges) hgh}
         target = targetHypergraph
-        (@) hgh2 hgh1 =  HypergraphMorphism {onvertices = (onvertices hgh2) |.| (onvertices hgh1), onhyperedges = (onhyperedges hgh2) |.| (onhyperedges hgh1), targetHypergraph = target hgh2}
+        (@) hgh2 hgh1 =  HypergraphMorphism {onVertices = (onVertices hgh2) |.| (onVertices hgh1), onHyperedges = (onHyperedges hgh2) |.| (onHyperedges hgh1), targetHypergraph = target hgh2}
     
     
     instance (Eq n, Eq e, Eq s) => Category (FinHyp n e s) (HypergraphMorphism n e s) (Hypergraph n e s) where
-        identity _ hg = HypergraphMorphism {onvertices = (idFromSet.vertices) hg, onhyperedges = (idFromSet.hyperedges) hg, targetHypergraph = hg}
+        identity _ hg = HypergraphMorphism {onVertices = (idFromSet.vertices) hg, onHyperedges = (idFromSet.hyperedges) hg, targetHypergraph = hg}
         ar _ s t = snd $ Set.catEither [hypergraphMorphism s t onv one | onv <- onvMaps, one <- oneMaps]
             where
                 onvMaps = Map.enumerateMaps (vertices s) (vertices t)
                 oneMaps = Map.enumerateMaps (hyperedges s) (hyperedges t)
     
-    data RewriteRule n e s = RewriteRule {
-                                    leftInjection
-                                }
+    
+    -- MA Cospans
+    
+    -- | The in-degree of a node n is the number of pairs (h,i) where h is an hyperedge and n is the i-th target.
+    inDegree :: (Eq n, Eq e, Eq s) =>  Hypergraph n e s -> n -> Int
+    inDegree hg n = sum [length [n | n' <- targetHyperedge e, n' == n] | e <- Set.setToList $ hyperedges hg]
+    
+    -- | The out-degree of a node n is the number of pairs (h,i) where h is an hyperedge and n is the i-th source.
+    outDegree :: (Eq n, Eq e, Eq s) =>  Hypergraph n e s -> n -> Int
+    outDegree hg n = sum [length [n | n' <- sourceHyperedge e, n' == n] | e <- Set.setToList $ hyperedges hg]
+    
+    -- | A hypergraph is monogamous if no node has in or out degree bigger than 1.
+    isMonogamous :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> Bool
+    isMonogamous hg = Set.null $ ((inDegree hg <$> vertices hg) ||| (outDegree hg <$> vertices hg)) |-| (set [0,1])
+            
+    -- | A hypergraph is acyclic if it contains no cycle. A path is defined as a list of hyperedges e_i such that e_i has at least a target equal to a source of e_i+1.
+    isAcyclic :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> Bool
+    isAcyclic hg = Set.and $ dfs [] <$> vertices hg
+        where
+            dfs alreadyVisited currentNode
+                | currentNode `elem` alreadyVisited = False
+                | otherwise = Set.and $ [and $ dfs (currentNode : alreadyVisited) <$> targetHyperedge e | e <- hyperedges hg, currentNode `elem` sourceHyperedge e]
+                
+                
+    -- | A 'MACospan' is a monogamous acyclic hypergraph with interface. The input interface are all nodes with in-degree 0 and the output interface are all nodes with out-degree 0.
+    -- 
+    -- 'MACospan' is private, use smart constructor 'maCospan'.
+    data MACospan n e s = MACospan {
+                            underlyingHypergraph :: Hypergraph n e s,
+                            inputInterface :: HypergraphMorphism n e s,
+                            outputInterface :: HypergraphMorphism n e s
+                          } deriving (Eq, Generic, PrettyPrint, Simplifiable)
+                          
+    -- | An error when constructing a 'MACospan'.
+    data MACospanError n = NotMonogamous
+                         | NotAcyclic
+                         | InputNodesIsNotInDegreeZero
+                         | OutputNodesIsNotOutDegreeZero
+                         | InputInterfaceIsNotDiscrete
+                         | OutputInterfaceIsNotDiscrete
+                         | InputInterfaceIsNotMono
+                         | OutputInterfaceIsNotMono
+                         deriving (Eq, Show, Generic, PrettyPrint, Simplifiable)
+       
+    -- | Smart constructor for 'MACospan'.
+    maCospan :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> Either (MACospanError n) (MACospan n e s)
+    maCospan hg inInterface outInterface
+        | not $ isMonogamous hg = Left NotMonogamous
+        | not $ isAcyclic hg = Left NotAcyclic
+        | not $ isDiscrete inInterface = Left InputInterfaceIsNotDiscrete
+        | not $ isDiscrete outInterface = Left OutputInterfaceIsNotDiscrete
+        | not $ isMono inInterface = Left InputInterfaceIsNotMono
+        | not $ isMono outInterface = Left OutputInterfaceIsNotMono
+        | faultyInputNode = Left $ InputNodesIsNotInDegreeZero 
+        | faultyOutputNode = Left $ OutputNodesIsNotOutDegreeZero
+        | otherwise = Right $ MACospan {underlyingHypergraph = hg, inputInterface = inInterface, outputInterface = outInterface} 
+        where
+            faultyInputNode = [n | n <- vertices hg, inDegree hg n == 0] /= (Map.values $ onVertices inInterface)
+            faultyOutputNode = [n | n <- vertices hg, outDegree hg n == 0] /= (Map.values $ onVertices outInterface)
+            isDiscrete gh_ = Map.null $ onHyperedges gh_
+            isMono gh_ = null $ [(k1,k2) | (k1,v1) <- al, (k2,v2) <- al, k1 /= k2 && v1 == v2]
+                where
+                    al = Map.mapToList $ onVertices gh_
+    
+    -- | Unsafe constructor for 'MACospan'.
+    unsafeMACospan :: Hypergraph n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> MACospan n e s
+    unsafeMACospan hg inInterface outInterface = MACospan {underlyingHypergraph = hg, inputInterface = inInterface, outputInterface = outInterface} 
+    
+    instance (Show n, Show e, Show s) => Show (MACospan n e s) where
+        show x = "(unsafeMACospan "++(show $ underlyingHypergraph x)++" "++(show $ inputInterface x)++" "++(show $ outputInterface x)++")"
+    
+    
+    
+    
+    
+    -- REWRITE RULES
+    
+    -- | A rewrite rule is a left hand side, a right hand side, an isomorphism between the interfaces of the left and right hand side.
+    -- data RewriteRule n e s = RewriteRule {
+                                    -- leftHandSide :: MACospan n e s,
+                                    -- rightHandSide :: MACospan n e s,
+                                    -- isomorphismInputInterface :: Map n n,
+                                    -- isomorphismOutputInterface :: Map n n,
+                                -- }
+                                -- deriving (Eq, Generic, PrettyPrint, Simplifiable)
+    
+    
     
     
     -- enumeratePreCriticalPairs :: 
