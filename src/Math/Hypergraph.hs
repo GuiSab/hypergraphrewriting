@@ -267,12 +267,15 @@ where
     
     -- REWRITE RULES
     
-    -- | A rewrite rule is a left hand side, a right hand side, an isomorphism between the interfaces of the left and right hand side.
-    -- data RewriteRule n e s = RewriteRule {
-                                    -- leftHandSide :: MACospan n e s,
-                                    -- rightHandSide :: MACospan n e s,
-                                    -- isomorphismInputInterface :: Map n n,
-                                    -- isomorphismOutputInterface :: Map n n,
+    
+    
+    
+    -- | A MA-rewrite rule is left connected if its left-hand side is strongly connected.
+    -- data LeftConnectedMARewriteRule n e s = RewriteRule {
+                                    -- leftHandSideInputNodes :: HypergraphMorphism n e s,
+                                    -- leftHandSideOutputNodes :: HypergraphMorphism n e s,
+                                    -- rightHandSideInputNodes :: HypergraphMorphism n e s,
+                                    -- rightHandSideOutputNodes :: HypergraphMorphism n e s,
                                 -- }
                                 -- deriving (Eq, Generic, PrettyPrint, Simplifiable)
     
