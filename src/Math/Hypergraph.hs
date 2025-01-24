@@ -57,12 +57,14 @@ module Math.Hypergraph
     
     -- * Convex match
     isConvexMatch,
-
-    -- * Pushout complement
-    pushoutComplement,
     
     -- * Pushout
     pushout,
+    pushoutComplement,
+    dpo,
+    
+    -- * Equalizer
+    
 )
 
 where
@@ -363,17 +365,19 @@ where
     
     
     
-    -- PUSHOUT COMPLEMENT
-    
-    
-    -- | Given a ma-cospan i -> L <- j, a ma-cospan n -> G <- m and a convex match f : L -> G, return the pushout complement (i -> C <- j,n -> C <- m) making the following diagram commute :
+    -- PUSHOUT
+            
+            
+    -- | Given a ma-cospan i -> L <- j, a ma-cospan n -> G <- m and a convex match f : L -> G, return the pushout complement (i -> C <- j,n -> C <- m) making the following diagram commute:
     --  L <- i+j
     -- f|     |
-    --  v     v
+    --  v ┐   v
     --  G <-  C
     --   ^    ^
     --    \   |
     --     n+m  
+    --
+    -- Note that the cospan returned are not MACospans, this function is only a single step in the double pushout function.
     pushoutComplement :: (Eq n, Eq e, Eq s) => MACospan n e s -> MACospan n e s -> HypergraphMorphism n e s -> (MACospan n e s,MACospan n e s)
     pushoutComplement csp1 csp2 match = (unsafeMACospan complement inputInterface1 outputInterface1, unsafeMACospan complement inputInterface2 outputInterface2)
         where
@@ -382,12 +386,44 @@ where
             nodesRemaining = (vertices $ underlyingHypergraph csp2) |-| ([(onVertices match) |!| n | n <- nodesToRemove])
             hyperedgesRemaining = (hyperedges $ underlyingHypergraph csp2) |-| (image $ onHyperedges match)
             complement = unsafeHypergraph nodesRemaining hyperedgesRemaining
-            inputInterface1 = unsafeHypergraphMorphism ((onVertices (inputInterface csp1)) |.| (onVertices match)) (weakMap []) complement
-            outputInterface1 = unsafeHypergraphMorphism ((onVertices (outputInterface csp1)) |.| (onVertices match)) (weakMap []) complement
+            inputInterface1 = unsafeHypergraphMorphism ((onVertices match) |.| (onVertices (inputInterface csp1))) (weakMap []) complement
+            outputInterface1 = unsafeHypergraphMorphism ((onVertices match) |.| (onVertices (outputInterface csp1))) (weakMap []) complement
             inputInterface2 = unsafeHypergraphMorphism (onVertices (inputInterface csp2)) (weakMap []) complement
             outputInterface2 = unsafeHypergraphMorphism (onVertices (outputInterface csp2)) (weakMap []) complement
             
-    
-    
+    -- | Given a ma-cospan i -> R <- j, a cospan n -> C <- m, a cospan i -> C <- j, return the pushout n -> P <- m such that the following diagram commute:
+    -- i+j -> R
+    --  |     |
+    --  v   ┌ v
+    --  C ->  P
+    --   ^    ^
+    --    \   |
+    --     n+m  
+    pushout :: (Eq n, Eq e, Eq s) => MACospan n e s -> MACospan n e s -> MACospan n e s -> MACospan (Either n n) (Either e e) s
+    pushout cspR cspC1 cspC2 = unsafeMACospan pushout' inputInterfacePushout outputInterfacePushout
+        where
+            nodesToAdd = ((vertices $ underlyingHypergraph cspR) |-| ((image $ onVertices (inputInterface cspR)) ||| (image $ onVertices (outputInterface cspR))))
+            nodesToAdd' = Left <$> nodesToAdd
+            interfaceOnVerticesR = (onVertices (inputInterface cspR)) `Map.union` (onVertices (outputInterface cspR))
+            interfaceOnVerticesC2 = (onVertices (inputInterface cspC2)) `Map.union` (onVertices (outputInterface cspC2))
+            hyperedgesToAdd = [hyperedge (Left $ idHyperedge e) ([if x `Set.elem` nodesToAdd then Left x else Right (interfaceOnVerticesC2 |!| ((pseudoInverse interfaceOnVerticesR) |!| x)) | x <- sourceHyperedge e]) ([if x `Set.elem` nodesToAdd then Left x else Right (interfaceOnVerticesC2 |!| ((pseudoInverse interfaceOnVerticesR) |!| x)) | x <- targetHyperedge e]) (labelHyperedge e)| e <- hyperedges $ underlyingHypergraph cspR]
             
-    -- enumeratePreCriticalPairs :: 
+            nodesToKeep = Right <$> (vertices $ underlyingHypergraph cspC2)
+            hyperedgesToKeep = [hyperedge (Right $ idHyperedge e) (Right <$> sourceHyperedge e) (Right <$> targetHyperedge e) (labelHyperedge e)| e <- hyperedges $ underlyingHypergraph cspC2]
+            
+            pushout' = unsafeHypergraph (nodesToKeep ||| nodesToAdd') (hyperedgesToKeep ||| hyperedgesToAdd)
+            inputInterfacePushout = unsafeHypergraphMorphism (weakMap [(Right k,Right v) | (k,v) <- Map.mapToList (onVertices $ inputInterface cspC1)]) (weakMap [(hyperedge (Right $ idHyperedge k) (Right <$> sourceHyperedge k) (Right <$> targetHyperedge k) (labelHyperedge k),hyperedge (Right $ idHyperedge v) (Right <$> sourceHyperedge v) (Right <$> targetHyperedge v) (labelHyperedge v)) | (k,v) <- Map.mapToList (onHyperedges $ inputInterface cspC1)]) pushout'
+            outputInterfacePushout = unsafeHypergraphMorphism (weakMap [(Right k,Right v) | (k,v) <- Map.mapToList (onVertices $ outputInterface cspC1)]) (weakMap [(hyperedge (Right $ idHyperedge k) (Right <$> sourceHyperedge k) (Right <$> targetHyperedge k) (labelHyperedge k),hyperedge (Right $ idHyperedge v) (Right <$> sourceHyperedge v) (Right <$> targetHyperedge v) (labelHyperedge v)) | (k,v) <- Map.mapToList (onHyperedges $ outputInterface cspC1)]) pushout'
+            
+    -- | Given a rewrite rule, a ma-cospan n -> G <- m and a convex match f : L -> G, return the double pushout application of the rewrite rule (n -> P <- m) making the following diagram commute:
+    --  L <- i+j -> R
+    -- f|     |     |
+    --  v ┐   v   ┌ v
+    --  G  <- C ->  P
+    --   ^    ^     ^
+    --    \   |   /
+    --       n+m  
+    dpo :: (Eq n, Eq e, Eq s) => LeftConnectedMARewriteRule n e s -> MACospan n e s -> HypergraphMorphism n e s -> MACospan (Either n n) (Either e e) s
+    dpo rr csp match = pushout (rightCospan rr) c2 c1
+        where
+            (c1,c2) = pushoutComplement (leftCospan rr) csp match

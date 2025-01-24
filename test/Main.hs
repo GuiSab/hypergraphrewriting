@@ -50,8 +50,8 @@ main = do
     let Right nb1R = hypergraph (set [0,1,2,3,4]) (set [hyperedge 0 [1,2] [4] "mu",hyperedge 0 [0,4] [3] "mu"])
     let Right nb1ain = hypergraphMorphism nb1Kin nb1L (weakMap [(0,0),(1,1),(2,2)]) (weakMap [])
     let Right nb1aout = hypergraphMorphism nb1Kout nb1L (weakMap [(3,3)]) (weakMap [])
-    let Right nb1bin =  hypergraphMorphism nb1Kin nb1L (weakMap [(0,0),(1,1),(2,2)]) (weakMap [])
-    let Right nb1bout =  hypergraphMorphism nb1Kout nb1L (weakMap [(3,3)]) (weakMap [])
+    let Right nb1bin =  hypergraphMorphism nb1Kin nb1R (weakMap [(0,0),(1,1),(2,2)]) (weakMap [])
+    let Right nb1bout =  hypergraphMorphism nb1Kout nb1R (weakMap [(3,3)]) (weakMap [])
     let Right nb1rr = leftConnectedMARewriteRule nb1ain nb1aout nb1bin nb1bout
     putStrLn $ show $ nb1rr 
     
@@ -62,6 +62,14 @@ main = do
     putStrLn $ show $ isConvexMatch f
     
     let (c1,c2) = pushoutComplement (leftCospan nb1rr) dcospan f
+    putStrLn $ "\n\n\n"
+    putStrLn $ show dcospan
+    putStrLn $ "\n\n"
     putStrLn $ show c1
+    putStrLn $ show c2
+    let push = pushout (rightCospan nb1rr) c2 c1
+    putStrLn $ show push
     
+    let resultDPO = dpo nb1rr dcospan f
+    putStrLn $ show resultDPO
     putStrLn "finished"
