@@ -46,7 +46,18 @@ module Math.Hypergraph
     maCospan,
     unsafeMACospan,
     
+    -- ** Left connected MA rewrite rule
+    LeftConnectedMARewriteRule,
+    isStronglyConnected,
+    leftConnectedMARewriteRule,
+    LeftConnectedMARewriteRuleError(..),
+    unsafeLeftConnectedMARewriteRule,
+    
+    -- * Convex match
+    isConvexMatch,
 
+    -- * Boundary complement
+    boundaryComplement,
 )
 
 where
@@ -226,6 +237,7 @@ where
     -- | An error when constructing a 'MACospan'.
     data MACospanError n = NotMonogamous
                          | NotAcyclic
+                         | IncompatibleInterfaces
                          | InputNodesIsNotInDegreeZero
                          | OutputNodesIsNotOutDegreeZero
                          | InputInterfaceIsNotDiscrete
@@ -235,8 +247,9 @@ where
                          deriving (Eq, Show, Generic, PrettyPrint, Simplifiable)
        
     -- | Smart constructor for 'MACospan'.
-    maCospan :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> Either (MACospanError n) (MACospan n e s)
-    maCospan hg inInterface outInterface
+    maCospan :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e s -> HypergraphMorphism n e s -> Either (MACospanError n) (MACospan n e s)
+    maCospan inInterface outInterface
+        | target inInterface /= target outInterface = Left IncompatibleInterfaces
         | not $ isMonogamous hg = Left NotMonogamous
         | not $ isAcyclic hg = Left NotAcyclic
         | not $ isDiscrete inInterface = Left InputInterfaceIsNotDiscrete
@@ -247,6 +260,7 @@ where
         | faultyOutputNode = Left $ OutputNodesIsNotOutDegreeZero
         | otherwise = Right $ MACospan {underlyingHypergraph = hg, inputInterface = inInterface, outputInterface = outInterface} 
         where
+            hg = target inInterface
             faultyInputNode = [n | n <- vertices hg, inDegree hg n == 0] /= (Map.values $ onVertices inInterface)
             faultyOutputNode = [n | n <- vertices hg, outDegree hg n == 0] /= (Map.values $ onVertices outInterface)
             isDiscrete gh_ = Map.null $ onHyperedges gh_
@@ -271,15 +285,77 @@ where
     
     
     -- | A MA-rewrite rule is left connected if its left-hand side is strongly connected.
-    -- data LeftConnectedMARewriteRule n e s = RewriteRule {
-                                    -- leftHandSideInputNodes :: HypergraphMorphism n e s,
-                                    -- leftHandSideOutputNodes :: HypergraphMorphism n e s,
-                                    -- rightHandSideInputNodes :: HypergraphMorphism n e s,
-                                    -- rightHandSideOutputNodes :: HypergraphMorphism n e s,
-                                -- }
-                                -- deriving (Eq, Generic, PrettyPrint, Simplifiable)
+    data LeftConnectedMARewriteRule n e s = LeftConnectedMARewriteRule {
+                                    leftHandSideInputNodes :: HypergraphMorphism n e s,
+                                    leftHandSideOutputNodes :: HypergraphMorphism n e s,
+                                    rightHandSideInputNodes :: HypergraphMorphism n e s,
+                                    rightHandSideOutputNodes :: HypergraphMorphism n e s
+                                }
+                                deriving (Eq, Generic, PrettyPrint, Simplifiable)
+    
+    -- | The 'MACospan' should really be acyclic, otherwise this function loops indefinitely.
+    isStronglyConnected :: (Eq n) => MACospan n e s -> Bool
+    isStronglyConnected macospan = Set.and $ [dfs o i | i <- Map.values (onVertices $ inputInterface macospan), o <- Map.values (onVertices $ outputInterface macospan)]
+        where
+            dfs targetNode currentNode
+                | currentNode == targetNode = True
+                | otherwise = Set.or $ [or $ dfs targetNode <$> targetHyperedge e | e <- hyperedges (underlyingHypergraph macospan), currentNode `elem` sourceHyperedge e]
+    
+    -- | An error when building a 'LeftConnectedMARewriteRule'.
+    data LeftConnectedMARewriteRuleError n = LeftHandSideIsNotMACospan (MACospanError n)
+                                           | RightHandSideIsNotMACospan (MACospanError n)
+                                           | LeftHandSideIsNotStronglyConnected
+                                           deriving (Eq, Show, Generic, PrettyPrint, Simplifiable)
+                         
+    -- | Smart constructor for 'LeftConnectedMARewriteRule'.
+    leftConnectedMARewriteRule :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> Either (LeftConnectedMARewriteRuleError n) (LeftConnectedMARewriteRule n e s)
+    leftConnectedMARewriteRule lhsInputNodes lhsOutputNodes rhsInputNodes rhsOutputNodes
+        | null maCospanInput = Left $ LeftHandSideIsNotMACospan errL
+        | null maCospanOutput = Left $ RightHandSideIsNotMACospan errR
+        | not $ isStronglyConnected maCospanIn2 = Left LeftHandSideIsNotStronglyConnected
+        | otherwise = Right $ LeftConnectedMARewriteRule{leftHandSideInputNodes = lhsInputNodes, leftHandSideOutputNodes = lhsOutputNodes, rightHandSideInputNodes = rhsInputNodes, rightHandSideOutputNodes = rhsOutputNodes}
+        where
+            maCospanInput = maCospan lhsInputNodes lhsOutputNodes
+            Left errL = maCospanInput
+            Right maCospanIn2 = maCospanInput
+            maCospanOutput = maCospan rhsInputNodes rhsOutputNodes
+            Left errR = maCospanOutput
+    
+    unsafeLeftConnectedMARewriteRule :: HypergraphMorphism n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> LeftConnectedMARewriteRule n e s
+    unsafeLeftConnectedMARewriteRule lhsInputNodes lhsOutputNodes rhsInputNodes rhsOutputNodes = LeftConnectedMARewriteRule{leftHandSideInputNodes = lhsInputNodes, leftHandSideOutputNodes = lhsOutputNodes, rightHandSideInputNodes = rhsInputNodes, rightHandSideOutputNodes = rhsOutputNodes}
+    
+    
+    instance (Show n, Show e, Show s) => Show (LeftConnectedMARewriteRule n e s) where
+        show x = "(unsafeLeftConnectedMARewriteRule "++(show $ leftHandSideInputNodes x)++" "++(show $ leftHandSideOutputNodes x)++" "++(show $ rightHandSideInputNodes x)++" "++(show $ rightHandSideOutputNodes x)++")"
     
     
     
+    -- CONVEX MATCH 
+    
+    -- | The source and target hypergraphs of the matching should be monogamous acyclic, otherwise this function loops indefinitely. Not optimized yet.
+    isConvexMatch :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e s -> Bool
+    isConvexMatch matching
+        | not $ isMono (onVertices matching) = False
+        | not $ isMono (onHyperedges matching) = False
+        | otherwise = Set.and $ pathInImage <$> allPaths
+        where
+            isMono m = null $ [(k1,k2) | (k1,v1) <- al, (k2,v2) <- al, k1 /= k2 && v1 == v2]
+                where
+                    al = Map.mapToList m
+            imageHyperedges = image $ onHyperedges matching
+            imageNodes = image $ onVertices matching
+            g = target matching
+            paths s t
+                | s == t = set [[]]
+                | otherwise = [(e:p) | e <- hyperedges g, s `elem` (sourceHyperedge e), x <- set $ targetHyperedge e, p <- paths x t]
+            allPaths = Set.concat2  $ [paths s t | s <- imageNodes, t <- imageNodes]
+            pathInImage p = and $ (\x -> x `isIn` imageHyperedges) <$> p
+    
+    
+    
+    -- BOUNDARY COMPLEMENT
+    
+    
+    -- boundaryComplement :: 
     
     -- enumeratePreCriticalPairs :: 
