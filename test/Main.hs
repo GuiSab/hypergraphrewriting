@@ -43,3 +43,25 @@ main = do
     let Right example32D = hypergraph (set [0]) (set [hyperedge 0 [] [0] "a1", hyperedge 1 [0] [] "a2"])
     let Right example32f = hypergraphMorphism example32L example32D (weakMap [(0,0)]) (weakMap [])
     putStrLn $ show $ isConvexMatch example32f
+    
+    let Right nb1L = hypergraph (set [0 :: Int,1,2,3,4]) (set [hyperedge 0 [0,1] [4] "mu",hyperedge 0 [4,2] [3] "mu"])
+    let Right nb1Kin = hypergraph (set [0 :: Int,1,2]) (set ([] :: [Hyperedge Int Int String]))
+    let Right nb1Kout = hypergraph (set [3 :: Int]) (set ([] :: [Hyperedge Int Int String]))
+    let Right nb1R = hypergraph (set [0,1,2,3,4]) (set [hyperedge 0 [1,2] [4] "mu",hyperedge 0 [0,4] [3] "mu"])
+    let Right nb1ain = hypergraphMorphism nb1Kin nb1L (weakMap [(0,0),(1,1),(2,2)]) (weakMap [])
+    let Right nb1aout = hypergraphMorphism nb1Kout nb1L (weakMap [(3,3)]) (weakMap [])
+    let Right nb1bin =  hypergraphMorphism nb1Kin nb1L (weakMap [(0,0),(1,1),(2,2)]) (weakMap [])
+    let Right nb1bout =  hypergraphMorphism nb1Kout nb1L (weakMap [(3,3)]) (weakMap [])
+    let Right nb1rr = leftConnectedMARewriteRule nb1ain nb1aout nb1bin nb1bout
+    putStrLn $ show $ nb1rr 
+    
+    -- let Right nm = hypergraph (set [0..5]) (set [])
+    let Right d = hypergraph (set [0..8]) (set [hyperedge 0 [0,1] [6] "mu", hyperedge 0 [6,2] [7] "mu", hyperedge 0 [7,3] [8] "mu", hyperedge 0 [8] [4,5] "nu"])
+    let Right dcospan = maCospan (unsafeHypergraphMorphism (memorizeFunction id (set [0..3])) mempty d) (unsafeHypergraphMorphism (memorizeFunction id (set [4,5])) mempty d)
+    let Right f = hypergraphMorphism nb1L d (weakMap [(0,0),(1,1),(2,2),(3,7),(4,6)]) (weakMap [(hyperedge 0 [0,1] [4] "mu",hyperedge 0 [0,1] [6] "mu"),(hyperedge 0 [4,2] [3] "mu", hyperedge 0 [6,2] [7] "mu")])
+    putStrLn $ show $ isConvexMatch f
+    
+    let (c1,c2) = pushoutComplement (leftCospan nb1rr) dcospan f
+    putStrLn $ show c1
+    
+    putStrLn "finished"

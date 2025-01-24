@@ -52,12 +52,17 @@ module Math.Hypergraph
     leftConnectedMARewriteRule,
     LeftConnectedMARewriteRuleError(..),
     unsafeLeftConnectedMARewriteRule,
+    leftCospan,
+    rightCospan,
     
     -- * Convex match
     isConvexMatch,
 
-    -- * Boundary complement
-    boundaryComplement,
+    -- * Pushout complement
+    pushoutComplement,
+    
+    -- * Pushout
+    pushout,
 )
 
 where
@@ -329,6 +334,11 @@ where
         show x = "(unsafeLeftConnectedMARewriteRule "++(show $ leftHandSideInputNodes x)++" "++(show $ leftHandSideOutputNodes x)++" "++(show $ rightHandSideInputNodes x)++" "++(show $ rightHandSideOutputNodes x)++")"
     
     
+    leftCospan :: (Eq n, Eq e, Eq s) => LeftConnectedMARewriteRule n e s -> MACospan n e s
+    leftCospan rr = unsafeMACospan (target $ leftHandSideInputNodes rr) (leftHandSideInputNodes rr) (leftHandSideOutputNodes rr)
+    
+    rightCospan :: (Eq n, Eq e, Eq s) => LeftConnectedMARewriteRule n e s -> MACospan n e s
+    rightCospan rr = unsafeMACospan (target $ rightHandSideInputNodes rr) (rightHandSideInputNodes rr) (rightHandSideOutputNodes rr)
     
     -- CONVEX MATCH 
     
@@ -353,9 +363,31 @@ where
     
     
     
-    -- BOUNDARY COMPLEMENT
+    -- PUSHOUT COMPLEMENT
     
     
-    -- boundaryComplement :: 
+    -- | Given a ma-cospan i -> L <- j, a ma-cospan n -> G <- m and a convex match f : L -> G, return the pushout complement (i -> C <- j,n -> C <- m) making the following diagram commute :
+    --  L <- i+j
+    -- f|     |
+    --  v     v
+    --  G <-  C
+    --   ^    ^
+    --    \   |
+    --     n+m  
+    pushoutComplement :: (Eq n, Eq e, Eq s) => MACospan n e s -> MACospan n e s -> HypergraphMorphism n e s -> (MACospan n e s,MACospan n e s)
+    pushoutComplement csp1 csp2 match = (unsafeMACospan complement inputInterface1 outputInterface1, unsafeMACospan complement inputInterface2 outputInterface2)
+        where
+            nodesToKeep = (image $ onVertices (inputInterface csp1)) ||| (image $ onVertices (outputInterface csp1))
+            nodesToRemove = (vertices $ underlyingHypergraph csp1) |-| nodesToKeep
+            nodesRemaining = (vertices $ underlyingHypergraph csp2) |-| ([(onVertices match) |!| n | n <- nodesToRemove])
+            hyperedgesRemaining = (hyperedges $ underlyingHypergraph csp2) |-| (image $ onHyperedges match)
+            complement = unsafeHypergraph nodesRemaining hyperedgesRemaining
+            inputInterface1 = unsafeHypergraphMorphism ((onVertices (inputInterface csp1)) |.| (onVertices match)) (weakMap []) complement
+            outputInterface1 = unsafeHypergraphMorphism ((onVertices (outputInterface csp1)) |.| (onVertices match)) (weakMap []) complement
+            inputInterface2 = unsafeHypergraphMorphism (onVertices (inputInterface csp2)) (weakMap []) complement
+            outputInterface2 = unsafeHypergraphMorphism (onVertices (outputInterface csp2)) (weakMap []) complement
+            
     
+    
+            
     -- enumeratePreCriticalPairs :: 
