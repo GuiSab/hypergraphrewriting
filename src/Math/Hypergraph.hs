@@ -63,9 +63,10 @@ module Math.Hypergraph
     pushoutComplement,
     dpo,
     coequalize,
+    coproduct,
     
-    -- * Enumerate critical pairs
-    
+    -- * Enumerate pre-critical pairs
+    enumeratePreCriticalPairs,
 )
 
 where
@@ -77,8 +78,6 @@ where
     import              Data.WeakMap.Safe
     import              Data.Simplifiable
     import              Math.IO.PrettyPrint
-
-    import              Math.FiniteCategory
    
     
     import              GHC.Generics
@@ -161,21 +160,21 @@ where
     
     
 
-    data HypergraphMorphism n e s = HypergraphMorphism {
-                                   onVertices :: Map n n,
-                                   onHyperedges :: Map (Hyperedge n e s) (Hyperedge n e s),
-                                   targetHypergraph :: Hypergraph n e s
-                                   } deriving (Eq, Generic, PrettyPrint, Simplifiable)
+    data HypergraphMorphism n1 e1 n2 e2 s = HypergraphMorphism {
+                                                   onVertices :: Map n1 n2,
+                                                   onHyperedges :: Map (Hyperedge n1 e1 s) (Hyperedge n2 e2 s),
+                                                   targetHypergraph :: Hypergraph n2 e2 s
+                                                   } deriving (Eq, Generic, PrettyPrint, Simplifiable)
 
-    data HypergraphMorphismError n e s = IncompatibleSource (Hyperedge n e s)
-                                       | IncompatibleTarget (Hyperedge n e s)
-                                       | IncompatibleLabels (Hyperedge n e s)
-                                       | MissingEdge (Hyperedge n e s)
-                                       | MissingVertex n
-                                       deriving (Eq, Show, Generic, PrettyPrint)
+    data HypergraphMorphismError n1 e1 n2 e2 s = IncompatibleSource (Hyperedge n1 e1 s)
+                                               | IncompatibleTarget (Hyperedge n1 e1 s)
+                                               | IncompatibleLabels (Hyperedge n1 e1 s)
+                                               | MissingEdge (Hyperedge n1 e1 s)
+                                               | MissingVertex n1
+                                               deriving (Eq, Show, Generic, PrettyPrint)
 
     -- | Smart constructor for 'HypergraphMorphism'.
-    hypergraphMorphism :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> Hypergraph n e s -> Map n n -> Map (Hyperedge n e s) (Hyperedge n e s) -> Either (HypergraphMorphismError n e s) (HypergraphMorphism n e s)
+    hypergraphMorphism :: (Eq n1, Eq e1, Eq n2, Eq e2, Eq s) => Hypergraph n1 e1 s -> Hypergraph n2 e2 s -> Map n1 n2 -> Map (Hyperedge n1 e1 s) (Hyperedge n2 e2 s) -> Either (HypergraphMorphismError n1 e1 n2 e2 s) (HypergraphMorphism n1 e1 n2 e2 s)
     hypergraphMorphism h h' onns ones
         | not $ Set.null $ incoherentSources = Left $ IncompatibleSource $ anElement incoherentSources
         | not $ Set.null $ incoherentTargets = Left $ IncompatibleTarget $ anElement incoherentTargets
@@ -191,28 +190,11 @@ where
             missingVertices   = (vertices h) |-| keys' onns
         
 
-    unsafeHypergraphMorphism :: Map n n -> Map (Hyperedge n e s) (Hyperedge n e s) -> Hypergraph n e s -> HypergraphMorphism n e s
+    unsafeHypergraphMorphism :: Map n1 n2 -> Map (Hyperedge n1 e1 s) (Hyperedge n2 e2 s) -> Hypergraph n2 e2 s -> HypergraphMorphism n1 e1 n2 e2 s
     unsafeHypergraphMorphism onns ones thg = HypergraphMorphism{onVertices=onns, onHyperedges=ones, targetHypergraph = thg}
 
-    instance (Show s, Show n, Show e) => Show (HypergraphMorphism n e s) where
+    instance (Show n1, Show e1, Show n2, Show e2, Show s) => Show (HypergraphMorphism n1 e1 n2 e2 s) where
         show hgh = "(unsafeHypergraphMorphism "++(show $ onVertices hgh)++" "++(show $ onHyperedges hgh)++ " " ++ (show $ targetHypergraph hgh) ++")"
-    
-    
-    -- | The category of finite hypergraphs on a given signature.
-    data FinHyp n e s = FinHyp deriving (Eq, Show, Generic, PrettyPrint, Simplifiable)
-    
-    instance (Eq n, Eq e, Eq s) => Morphism (HypergraphMorphism n e s) (Hypergraph n e s) where
-        source hgh = Hypergraph {vertices = (domain.onVertices) hgh, hyperedges = (domain.onHyperedges) hgh}
-        target = targetHypergraph
-        (@) hgh2 hgh1 =  HypergraphMorphism {onVertices = (onVertices hgh2) |.| (onVertices hgh1), onHyperedges = (onHyperedges hgh2) |.| (onHyperedges hgh1), targetHypergraph = target hgh2}
-    
-    
-    instance (Eq n, Eq e, Eq s) => Category (FinHyp n e s) (HypergraphMorphism n e s) (Hypergraph n e s) where
-        identity _ hg = HypergraphMorphism {onVertices = (idFromSet.vertices) hg, onHyperedges = (idFromSet.hyperedges) hg, targetHypergraph = hg}
-        ar _ s t = snd $ Set.catEither [hypergraphMorphism s t onv one | onv <- onvMaps, one <- oneMaps]
-            where
-                onvMaps = Map.enumerateMaps (vertices s) (vertices t)
-                oneMaps = Map.enumerateMaps (hyperedges s) (hyperedges t)
     
     
     -- MA Cospans
@@ -243,8 +225,8 @@ where
     -- 'MACospan' is private, use smart constructor 'maCospan'.
     data MACospan n e s = MACospan {
                             underlyingHypergraph :: Hypergraph n e s,
-                            inputInterface :: HypergraphMorphism n e s,
-                            outputInterface :: HypergraphMorphism n e s
+                            inputInterface :: HypergraphMorphism n e n e s,
+                            outputInterface :: HypergraphMorphism n e n e s
                           } deriving (Eq, Generic, PrettyPrint, Simplifiable)
                           
     -- | An error when constructing a 'MACospan'.
@@ -260,9 +242,9 @@ where
                          deriving (Eq, Show, Generic, PrettyPrint, Simplifiable)
        
     -- | Smart constructor for 'MACospan'.
-    maCospan :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e s -> HypergraphMorphism n e s -> Either (MACospanError n) (MACospan n e s)
+    maCospan :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e n e s -> HypergraphMorphism n e n e s -> Either (MACospanError n) (MACospan n e s)
     maCospan inInterface outInterface
-        | target inInterface /= target outInterface = Left IncompatibleInterfaces
+        | targetHypergraph inInterface /= targetHypergraph outInterface = Left IncompatibleInterfaces
         | not $ isMonogamous hg = Left NotMonogamous
         | not $ isAcyclic hg = Left NotAcyclic
         | not $ isDiscrete inInterface = Left InputInterfaceIsNotDiscrete
@@ -273,7 +255,7 @@ where
         | faultyOutputNode = Left $ OutputNodesIsNotOutDegreeZero
         | otherwise = Right $ MACospan {underlyingHypergraph = hg, inputInterface = inInterface, outputInterface = outInterface} 
         where
-            hg = target inInterface
+            hg = targetHypergraph inInterface
             faultyInputNode = [n | n <- vertices hg, inDegree hg n == 0] /= (Map.values $ onVertices inInterface)
             faultyOutputNode = [n | n <- vertices hg, outDegree hg n == 0] /= (Map.values $ onVertices outInterface)
             isDiscrete gh_ = Map.null $ onHyperedges gh_
@@ -282,7 +264,7 @@ where
                     al = Map.mapToList $ onVertices gh_
     
     -- | Unsafe constructor for 'MACospan'.
-    unsafeMACospan :: Hypergraph n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> MACospan n e s
+    unsafeMACospan :: Hypergraph n e s -> HypergraphMorphism n e n e s -> HypergraphMorphism n e n e s -> MACospan n e s
     unsafeMACospan hg inInterface outInterface = MACospan {underlyingHypergraph = hg, inputInterface = inInterface, outputInterface = outInterface} 
     
     instance (Show n, Show e, Show s) => Show (MACospan n e s) where
@@ -299,10 +281,10 @@ where
     
     -- | A MA-rewrite rule is left connected if its left-hand side is strongly connected.
     data LeftConnectedMARewriteRule n e s = LeftConnectedMARewriteRule {
-                                    leftHandSideInputNodes :: HypergraphMorphism n e s,
-                                    leftHandSideOutputNodes :: HypergraphMorphism n e s,
-                                    rightHandSideInputNodes :: HypergraphMorphism n e s,
-                                    rightHandSideOutputNodes :: HypergraphMorphism n e s
+                                    leftHandSideInputNodes :: HypergraphMorphism n e n e s,
+                                    leftHandSideOutputNodes :: HypergraphMorphism n e n e s,
+                                    rightHandSideInputNodes :: HypergraphMorphism n e n e s,
+                                    rightHandSideOutputNodes :: HypergraphMorphism n e n e s
                                 }
                                 deriving (Eq, Generic, PrettyPrint, Simplifiable)
     
@@ -321,7 +303,7 @@ where
                                            deriving (Eq, Show, Generic, PrettyPrint, Simplifiable)
                          
     -- | Smart constructor for 'LeftConnectedMARewriteRule'.
-    leftConnectedMARewriteRule :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> Either (LeftConnectedMARewriteRuleError n) (LeftConnectedMARewriteRule n e s)
+    leftConnectedMARewriteRule :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e n e s -> HypergraphMorphism n e n e s -> HypergraphMorphism n e n e s -> HypergraphMorphism n e n e s -> Either (LeftConnectedMARewriteRuleError n) (LeftConnectedMARewriteRule n e s)
     leftConnectedMARewriteRule lhsInputNodes lhsOutputNodes rhsInputNodes rhsOutputNodes
         | null maCospanInput = Left $ LeftHandSideIsNotMACospan errL
         | null maCospanOutput = Left $ RightHandSideIsNotMACospan errR
@@ -334,7 +316,7 @@ where
             maCospanOutput = maCospan rhsInputNodes rhsOutputNodes
             Left errR = maCospanOutput
     
-    unsafeLeftConnectedMARewriteRule :: HypergraphMorphism n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s -> LeftConnectedMARewriteRule n e s
+    unsafeLeftConnectedMARewriteRule :: HypergraphMorphism n e n e s -> HypergraphMorphism n e n e s -> HypergraphMorphism n e n e s -> HypergraphMorphism n e n e s -> LeftConnectedMARewriteRule n e s
     unsafeLeftConnectedMARewriteRule lhsInputNodes lhsOutputNodes rhsInputNodes rhsOutputNodes = LeftConnectedMARewriteRule{leftHandSideInputNodes = lhsInputNodes, leftHandSideOutputNodes = lhsOutputNodes, rightHandSideInputNodes = rhsInputNodes, rightHandSideOutputNodes = rhsOutputNodes}
     
     
@@ -343,15 +325,15 @@ where
     
     
     leftCospan :: (Eq n, Eq e, Eq s) => LeftConnectedMARewriteRule n e s -> MACospan n e s
-    leftCospan rr = unsafeMACospan (target $ leftHandSideInputNodes rr) (leftHandSideInputNodes rr) (leftHandSideOutputNodes rr)
+    leftCospan rr = unsafeMACospan (targetHypergraph $ leftHandSideInputNodes rr) (leftHandSideInputNodes rr) (leftHandSideOutputNodes rr)
     
     rightCospan :: (Eq n, Eq e, Eq s) => LeftConnectedMARewriteRule n e s -> MACospan n e s
-    rightCospan rr = unsafeMACospan (target $ rightHandSideInputNodes rr) (rightHandSideInputNodes rr) (rightHandSideOutputNodes rr)
+    rightCospan rr = unsafeMACospan (targetHypergraph $ rightHandSideInputNodes rr) (rightHandSideInputNodes rr) (rightHandSideOutputNodes rr)
     
     -- CONVEX MATCH 
     
     -- | The source and target hypergraphs of the matching should be monogamous acyclic, otherwise this function loops indefinitely. Not optimized yet.
-    isConvexMatch :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e s -> Bool
+    isConvexMatch :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e n e s-> Bool
     isConvexMatch matching
         | not $ isMono (onVertices matching) = False
         | not $ isMono (onHyperedges matching) = False
@@ -362,7 +344,7 @@ where
                     al = Map.mapToList m
             imageHyperedges = image $ onHyperedges matching
             imageNodes = image $ onVertices matching
-            g = target matching
+            g = targetHypergraph matching
             paths s t
                 | s == t = set [[]]
                 | otherwise = [(e:p) | e <- hyperedges g, s `elem` (sourceHyperedge e), x <- set $ targetHyperedge e, p <- paths x t]
@@ -384,7 +366,7 @@ where
     --     n+m  
     --
     -- Note that the cospan returned are not MACospans, this function is only a single step in the double pushout function.
-    pushoutComplement :: (Eq n, Eq e, Eq s) => MACospan n e s -> MACospan n e s -> HypergraphMorphism n e s -> (MACospan n e s,MACospan n e s)
+    pushoutComplement :: (Eq n, Eq e, Eq s) => MACospan n e s -> MACospan n e s -> HypergraphMorphism n e n e s -> (MACospan n e s,MACospan n e s)
     pushoutComplement csp1 csp2 match = (unsafeMACospan complement inputInterface1 outputInterface1, unsafeMACospan complement inputInterface2 outputInterface2)
         where
             nodesToKeep = (image $ onVertices (inputInterface csp1)) ||| (image $ onVertices (outputInterface csp1))
@@ -429,7 +411,7 @@ where
     --   ^    ^     ^
     --    \   |   /
     --       n+m  
-    dpo :: (Eq n, Eq e, Eq s) => LeftConnectedMARewriteRule n e s -> MACospan n e s -> HypergraphMorphism n e s -> MACospan (Either n n) (Either e e) s
+    dpo :: (Eq n, Eq e, Eq s) => LeftConnectedMARewriteRule n e s -> MACospan n e s -> HypergraphMorphism n e n e s -> MACospan (Either n n) (Either e e) s
     dpo rr csp match = pushout (rightCospan rr) c2 c1
         where
             (c1,c2) = pushoutComplement (leftCospan rr) csp match
@@ -437,23 +419,84 @@ where
             
             
             
-    -- COEQUALIZER
+    -- COEQUALIZER and COPRODUCT
     
     -- | Given two hypergraph morphisms f : G_1 -> G_2 and g : G_1 -> G_2, return a hypergraph morphism c : G_2 -> G such that G_1 => G_2 -> G is a coequalizer diagram.
     --
     -- The two given hypergraph morphism should have the same source and target.
-    coequalize :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s
+    coequalize :: (Eq n1, Eq e1, Eq n2, Eq e2, Eq s) => HypergraphMorphism n1 e1 n2 e2 s -> HypergraphMorphism n1 e1 n2 e2 s -> HypergraphMorphism n2 e2 n2 e2 s
     coequalize f g = morph
         where
             nodesGluedByG = image $ onVertices g
             edgesGluedByG = image $ onHyperedges g
             glueNodes v = if v `isIn` nodesGluedByG then (onVertices f) |!| ((pseudoInverse $ onVertices g) |!| v) else v
             glueHyperedges e = if e `isIn` edgesGluedByG then (onHyperedges f) |!| ((pseudoInverse $ onHyperedges g) |!| e) else e
-            newNodes = glueNodes <$> (vertices $ target f)  
+            newNodes = glueNodes <$> (vertices $ targetHypergraph f)  
             transformHyperedge e = hyperedge (idHyperedge e) (glueNodes <$> sourceHyperedge e) (glueNodes <$> targetHyperedge e) (labelHyperedge e)
-            newHyperedges = [transformHyperedge e | e <- glueHyperedges <$> (hyperedges $ target f)]
+            newHyperedges = [transformHyperedge e | e <- glueHyperedges <$> (hyperedges $ targetHypergraph f)]
             newHypergraph = unsafeHypergraph newNodes newHyperedges
-            morph = unsafeHypergraphMorphism (memorizeFunction glueNodes (vertices $ target f)) (memorizeFunction (transformHyperedge.glueHyperedges) (hyperedges $ target f)) newHypergraph
+            morph = unsafeHypergraphMorphism (memorizeFunction glueNodes (vertices $ targetHypergraph f)) (memorizeFunction (transformHyperedge.glueHyperedges) (hyperedges $ targetHypergraph f)) newHypergraph
             
             
+    -- | Given two hypergraphs, return the injections to their coproduct.
+    coproduct :: (Eq n, Eq e, Eq s) => Hypergraph n e s -> Hypergraph n e s -> (HypergraphMorphism n e (Either n n) (Either e e) s, HypergraphMorphism n e (Either n n) (Either e e) s)
+    coproduct g1 g2 = (leftInjection,rightInjection)
+        where
+            transformLeftVertices = Left 
+            transformRightVertices = Right 
+            transformLeftHyperedges e = hyperedge (Left $ idHyperedge e) (Left <$> sourceHyperedge e) (Left <$> targetHyperedge e) (labelHyperedge e)
+            transformRightHyperedges e = hyperedge (Right $ idHyperedge e) (Right <$> sourceHyperedge e) (Right <$> targetHyperedge e) (labelHyperedge e)
+            coprod = unsafeHypergraph ((transformLeftVertices <$> vertices g1) ||| (transformRightVertices <$> vertices g2)) ((transformLeftHyperedges <$> hyperedges g1) ||| (transformRightHyperedges <$> hyperedges g2))
+            leftInjection = unsafeHypergraphMorphism (memorizeFunction transformLeftVertices (vertices g1)) (memorizeFunction transformLeftHyperedges (hyperedges g1)) coprod
+            rightInjection = unsafeHypergraphMorphism (memorizeFunction transformRightVertices (vertices g2)) (memorizeFunction transformRightHyperedges (hyperedges g2)) coprod
+            
+    -- ENUMERATE PRE-CRITICAL PAIRS
     
+    -- Definition of E_s in line 2
+    edgesWithSameLabel :: (Eq s) => Hypergraph n1 e1 s -> Hypergraph n2 e2 s -> Set (Hyperedge (n1,n2) (e1,e2) s)
+    edgesWithSameLabel g1 g2 = [hyperedge (idHyperedge e1, idHyperedge e2) (zip (sourceHyperedge e1) (sourceHyperedge e2)) (zip (targetHyperedge e1) (targetHyperedge e2)) (labelHyperedge e1) | e1 <- hyperedges g1, e2 <- hyperedges g2, labelHyperedge e1 == labelHyperedge e2]
+
+
+    eitherToMaybe :: Either a b -> Maybe b
+    eitherToMaybe (Left x) = Nothing
+    eitherToMaybe (Right x) = Just x
+    
+    -- | Enumerate all pre-critical pairs of a given set of left connected ma rewrite rules. Not optimized algorithm.
+    enumeratePreCriticalPairs :: (Simplifiable n, Eq n, Eq e, Eq s) => Set (LeftConnectedMARewriteRule n e s) -> Set (MACospan (Either n n) (Either e e) s)
+    enumeratePreCriticalPairs rules = Set.concat2 $ (uncurry firstLoop) <$> pairsOfRules
+        where
+            pairsOfRules = [(r1,r2) | r1 <- rules, r2 <- rules]
+            firstLoop r1 r2 = Set.catMaybes $ eitherToMaybe <$> secondLoop l1 l2 <$> hypergraphsToConsider
+                where
+                    l1 = targetHypergraph $ leftHandSideInputNodes r1
+                    l2 = targetHypergraph $ leftHandSideInputNodes r2
+                    pairsOfVertices = [(v1,v2) | v1 <- vertices l1, v2 <- vertices l2]
+                    pairsOfHyperedges = edgesWithSameLabel l1 l2
+                    completeHypergraph g = unsafeHypergraph (simplify $ vertices g ||| (set $ Set.concat [sourceHyperedge e ++ targetHyperedge e | e <- hyperedges g])) (hyperedges g)
+                    hypergraphsToConsider = [completeHypergraph (unsafeHypergraph vs es) | vs <- Set.powerSet pairsOfVertices, es <- Set.powerSet pairsOfHyperedges, not (Set.null vs && Set.null es)]
+                    secondLoop l1 l2 g = candidateMACospan
+                        where
+                            leftProjectHyperedge e = hyperedge (fst $ idHyperedge e) (fst <$> sourceHyperedge e) (fst <$> targetHyperedge e) (labelHyperedge e)
+                            rightProjectHyperedge e = hyperedge (snd $ idHyperedge e) (snd <$> sourceHyperedge e) (snd <$> targetHyperedge e) (labelHyperedge e)
+                            leftProjection = unsafeHypergraphMorphism pv pe l1
+                                where
+                                    pv = memorizeFunction fst (vertices g)
+                                    pe = memorizeFunction leftProjectHyperedge (hyperedges g)
+                            rightProjection = unsafeHypergraphMorphism pv pe l2
+                                where
+                                    pv = memorizeFunction snd (vertices g)
+                                    pe = memorizeFunction rightProjectHyperedge (hyperedges g)
+                            
+                            (leftInjection, rightInjection) = coproduct (targetHypergraph leftProjection) (targetHypergraph rightProjection)
+                            
+                            leftComposite = unsafeHypergraphMorphism ((onVertices leftInjection) |.| (onVertices leftProjection)) ((onHyperedges leftInjection) |.| (onHyperedges leftProjection)) (targetHypergraph leftInjection)
+                            rightComposite = unsafeHypergraphMorphism ((onVertices rightInjection) |.| (onVertices rightProjection)) ((onHyperedges rightInjection) |.| (onHyperedges rightProjection)) (targetHypergraph rightInjection)
+                            
+                            coequalizer = targetHypergraph $ coequalize leftComposite rightComposite
+                            
+                            inDegreeZeroVertices = [v | v <- vertices coequalizer, inDegree coequalizer v == 0]
+                            outDegreeZeroVertices = [v | v <- vertices coequalizer, outDegree coequalizer v == 0]
+                            inInterface = unsafeHypergraphMorphism (memorizeFunction id inDegreeZeroVertices) (weakMap []) coequalizer
+                            outInterface = unsafeHypergraphMorphism (memorizeFunction id outDegreeZeroVertices) (weakMap []) coequalizer
+                            candidateMACospan = maCospan inInterface outInterface
+                    
