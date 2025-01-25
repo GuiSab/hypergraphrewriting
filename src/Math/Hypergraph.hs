@@ -58,12 +58,13 @@ module Math.Hypergraph
     -- * Convex match
     isConvexMatch,
     
-    -- * Pushout
+    -- * Categorical constructions
     pushout,
     pushoutComplement,
     dpo,
+    coequalize,
     
-    -- * Equalizer
+    -- * Enumerate critical pairs
     
 )
 
@@ -86,6 +87,8 @@ where
     -- HYPERGRAPHS
     
     -- | An 'Hyperedge' is composed of a label in a signature 's', a list of source vertices, a list of target vertices and a hyperedge identifier.
+    --
+    -- The identifier of an hyperedge should be unique among hyperedges with the same label in a given hypergraph.
     data Hyperedge n e s = Hyperedge{
                             idHyperedge :: e,
                             sourceHyperedge :: [n],
@@ -131,19 +134,22 @@ where
     -- | An error when constructing a hypergraph.
     data HypergraphError n e s = UnknownVertex n
                                | IncompatibleArity (Hyperedge n e s) (Hyperedge n e s)
+                               | SeveralHyperedgesWithSameId (Hyperedge n e s) (Hyperedge n e s)
                                deriving (Eq, Show, Generic, PrettyPrint, Simplifiable)
     
     -- | Smart constructor of 'Hypergraph'.
-    hypergraph :: (Eq n, Eq s) => Set n -> Set (Hyperedge n e s) -> Either (HypergraphError n e s) (Hypergraph n e s)
+    hypergraph :: (Eq n, Eq e, Eq s) => Set n -> Set (Hyperedge n e s) -> Either (HypergraphError n e s) (Hypergraph n e s)
     hypergraph ns es
         | not $ Set.null $ unknownSources = Left $ UnknownVertex $ anElement unknownSources
         | not $ Set.null $ unknownTargets = Left $ UnknownVertex $ anElement unknownTargets
         | not $ Set.null $ incompatibleHyperedges = Left $ uncurry IncompatibleArity $ anElement incompatibleHyperedges
+        | not $ Set.null $ duplicateId = Left $ uncurry SeveralHyperedgesWithSameId $ anElement duplicateId
         | otherwise = Right Hypergraph{vertices=ns, hyperedges=es}
         where
             unknownSources = (set $ Set.concat $ sourceHyperedge <$> es) |-| ns
             unknownTargets = (set $ Set.concat $ targetHyperedge <$> es) |-| ns
             incompatibleHyperedges = [(e1,e2) | e1 <- es, e2 <- es, labelHyperedge e1 == labelHyperedge e2 && (arity e1 /= arity e2 || coarity e1 /= coarity e2)]
+            duplicateId = [(e1,e2) | e1 <- es, e2 <- es, labelHyperedge e1 == labelHyperedge e2, idHyperedge e1 == idHyperedge e2, e1 /= e2]
 
     -- | Unsafe constructor of 'Hypergraph', does not check the 'Hypergraph' structure.
     unsafeHypergraph :: Set n -> Set (Hyperedge n e s) -> Hypergraph n e s
@@ -427,3 +433,27 @@ where
     dpo rr csp match = pushout (rightCospan rr) c2 c1
         where
             (c1,c2) = pushoutComplement (leftCospan rr) csp match
+            
+            
+            
+            
+    -- COEQUALIZER
+    
+    -- | Given two hypergraph morphisms f : G_1 -> G_2 and g : G_1 -> G_2, return a hypergraph morphism c : G_2 -> G such that G_1 => G_2 -> G is a coequalizer diagram.
+    --
+    -- The two given hypergraph morphism should have the same source and target.
+    coequalize :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e s -> HypergraphMorphism n e s -> HypergraphMorphism n e s
+    coequalize f g = morph
+        where
+            nodesGluedByG = image $ onVertices g
+            edgesGluedByG = image $ onHyperedges g
+            glueNodes v = if v `isIn` nodesGluedByG then (onVertices f) |!| ((pseudoInverse $ onVertices g) |!| v) else v
+            glueHyperedges e = if e `isIn` edgesGluedByG then (onHyperedges f) |!| ((pseudoInverse $ onHyperedges g) |!| e) else e
+            newNodes = glueNodes <$> (vertices $ target f)  
+            transformHyperedge e = hyperedge (idHyperedge e) (glueNodes <$> sourceHyperedge e) (glueNodes <$> targetHyperedge e) (labelHyperedge e)
+            newHyperedges = [transformHyperedge e | e <- glueHyperedges <$> (hyperedges $ target f)]
+            newHypergraph = unsafeHypergraph newNodes newHyperedges
+            morph = unsafeHypergraphMorphism (memorizeFunction glueNodes (vertices $ target f)) (memorizeFunction (transformHyperedge.glueHyperedges) (hyperedges $ target f)) newHypergraph
+            
+            
+    
