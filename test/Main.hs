@@ -2,7 +2,7 @@ module Main (main) where
 
 import              Data.WeakSet.Safe
 import              Data.WeakMap.Safe
-import              Math.Hypergraph
+import              Math.HypergraphRewriting
 import              Math.IO.PrettyPrint
 import              Data.Simplifiable
 

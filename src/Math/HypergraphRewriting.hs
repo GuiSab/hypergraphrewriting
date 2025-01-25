@@ -16,7 +16,7 @@ A hypergraph is a finite labeled directed hypergraphs in this library.
 
 -}
 
-module Math.Hypergraph
+module Math.HypergraphRewriting
 (
     -- * Hypergraph
     Hyperedge(..),
