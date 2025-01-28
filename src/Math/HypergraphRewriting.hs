@@ -37,6 +37,10 @@ module Math.HypergraphRewriting
     hypergraphMorphism,
     unsafeHypergraphMorphism,
     HypergraphMorphismError(..),
+    -- ** Getters
+    onVertices,
+    onHyperedges,
+    targetHypergraph,
     
     -- ** MA-Cospan
     isMonogamous,
@@ -45,6 +49,10 @@ module Math.HypergraphRewriting
     MACospanError(..),
     maCospan,
     unsafeMACospan,
+    -- ** Getters
+    underlyingHypergraph,
+    inputInterface,
+    outputInterface,
     
     -- ** Left connected MA rewrite rule
     LeftConnectedMARewriteRule,
@@ -52,8 +60,14 @@ module Math.HypergraphRewriting
     leftConnectedMARewriteRule,
     LeftConnectedMARewriteRuleError(..),
     unsafeLeftConnectedMARewriteRule,
+    -- ** Getters
+    leftHandSideInputNodes,
+    leftHandSideOutputNodes,
+    rightHandSideInputNodes,
+    rightHandSideOutputNodes,
     leftCospan,
     rightCospan,
+    
     
     -- * Convex match
     isConvexMatch,
@@ -66,6 +80,10 @@ module Math.HypergraphRewriting
     coproduct,
     
     -- * Enumerate pre-critical pairs
+    combinations,
+    partialPermutations,
+    enumerateKMatchingOnBipartiteCompleteGraph,
+    enumerateMatchingOnBipartiteCompleteGraph,
     enumeratePreCriticalPairs,
 )
 
@@ -89,10 +107,10 @@ where
     --
     -- The identifier of an hyperedge should be unique among hyperedges with the same label in a given hypergraph.
     data Hyperedge n e s = Hyperedge{
-                            idHyperedge :: e,
+                            labelHyperedge :: s,
                             sourceHyperedge :: [n],
                             targetHyperedge :: [n],
-                            labelHyperedge :: s
+                            idHyperedge :: e
                             }
                           deriving (Eq, Show, Generic, Simplifiable)
                           
@@ -333,7 +351,7 @@ where
     -- CONVEX MATCH 
     
     -- | The source and target hypergraphs of the matching should be monogamous acyclic, otherwise this function loops indefinitely. Not optimized yet.
-    isConvexMatch :: (Eq n, Eq e, Eq s) => HypergraphMorphism n e n e s-> Bool
+    isConvexMatch :: (Eq n1, Eq e1, Eq n2, Eq e2, Eq s) => HypergraphMorphism n1 e1 n2 e2 s-> Bool
     isConvexMatch matching
         | not $ isMono (onVertices matching) = False
         | not $ isMono (onHyperedges matching) = False
@@ -421,7 +439,7 @@ where
             
     -- COEQUALIZER and COPRODUCT
     
-    -- | Given two hypergraph morphisms f : G_1 -> G_2 and g : G_1 -> G_2, return a hypergraph morphism c : G_2 -> G such that G_1 => G_2 -> G is a coequalizer diagram.
+    -- | Given two hypergraph morphisms f : G_1 -> G_2 and g : G_1 -> G_2 respecting the matching property, return a hypergraph morphism c : G_2 -> G such that G_1 => G_2 -> G is a coequalizer diagram.
     --
     -- The two given hypergraph morphism should have the same source and target.
     coequalize :: (Eq n1, Eq e1, Eq n2, Eq e2, Eq s) => HypergraphMorphism n1 e1 n2 e2 s -> HypergraphMorphism n1 e1 n2 e2 s -> HypergraphMorphism n2 e2 n2 e2 s
@@ -451,10 +469,31 @@ where
             rightInjection = unsafeHypergraphMorphism (memorizeFunction transformRightVertices (vertices g2)) (memorizeFunction transformRightHyperedges (hyperedges g2)) coprod
             
     -- ENUMERATE PRE-CRITICAL PAIRS
+
     
-    -- Definition of E_s in line 2
-    edgesWithSameLabel :: (Eq s) => Hypergraph n1 e1 s -> Hypergraph n2 e2 s -> Set (Hyperedge (n1,n2) (e1,e2) s)
-    edgesWithSameLabel g1 g2 = [hyperedge (idHyperedge e1, idHyperedge e2) (zip (sourceHyperedge e1) (sourceHyperedge e2)) (zip (targetHyperedge e1) (targetHyperedge e2)) (labelHyperedge e1) | e1 <- hyperedges g1, e2 <- hyperedges g2, labelHyperedge e1 == labelHyperedge e2]
+    -- | Given a set E and a number k, return the different combinations of size k in E.
+    combinations :: (Eq e) => Set e -> Int -> Set (Set e)
+    combinations es 0 = set [set []]
+    combinations es k = set $ Set.setToList $ [Set.insert e comb | comb <- combinations es (k-1), e <- es, not $ e `isIn` comb]
+    
+    -- | Given a set E and a number k, return the different partial permutations of size k in E.
+    partialPermutations :: (Eq e) => Set e -> Int -> Set [e]
+    partialPermutations es 0 = set [[]]
+    partialPermutations es k = [e:pperm  | e <- es, pperm <- partialPermutations (Set.delete e es) (k-1)]
+    
+    -- | Given two sets of size a and b, we consider the complete bipartite graph K_{a,b}. This function enumerates all matchings with k edges on K_{a,b}. There are k! C(k,n1) C(k,n2) matchings of size k.
+    enumerateKMatchingOnBipartiteCompleteGraph :: (Eq a, Eq b) => Set a -> Set b -> Int -> Set (Set (a,b))
+    enumerateKMatchingOnBipartiteCompleteGraph setA setB k = [set $ zip (setToList a) b | a <- combinations setA k, b <- partialPermutations setB k]
+    
+    -- | Given two sets of size a and b, we consider the complete bipartite graph K_{a,b}. This function enumerates all non-empty matchings on K_{a,b}. There are \sum_{1 \leq k \leq min(a,b)} k! C(k,n1) C(k,n2) non-empty matchings.
+    enumerateMatchingOnBipartiteCompleteGraph :: (Eq a, Eq b) => Set a -> Set b -> Set (Set (a,b))
+    enumerateMatchingOnBipartiteCompleteGraph setA setB = Set.unions $ enumerateKMatchingOnBipartiteCompleteGraph setA setB <$> [0.. (min (cardinal setA) (cardinal setB))]
+            
+
+
+    -- | Given matchings for every label, combine them in every possible way to product every global matchings.
+    combineDifferentMatchings :: (Eq e) =>  Set (Set (Set e)) -> Set (Set e)
+    combineDifferentMatchings setOfMatchingsForEachLabel = Set.filter (not.(Set.null)) $ Set.unions <$> (cartesianProductOfSets $ setToList setOfMatchingsForEachLabel)
 
 
     eitherToMaybe :: Either a b -> Maybe b
@@ -462,18 +501,20 @@ where
     eitherToMaybe (Right x) = Just x
     
     -- | Enumerate all pre-critical pairs of a given set of left connected ma rewrite rules. Not optimized algorithm.
-    enumeratePreCriticalPairs :: (Simplifiable n, Eq n, Eq e, Eq s) => Set (LeftConnectedMARewriteRule n e s) -> Set (MACospan (Either n n) (Either e e) s)
+    enumeratePreCriticalPairs :: (Simplifiable n, Eq n, Eq e, Eq s) => Set (LeftConnectedMARewriteRule n e s) -> Set (LeftConnectedMARewriteRule n e s,LeftConnectedMARewriteRule n e s,(MACospan (Either n n) (Either e e) s))
     enumeratePreCriticalPairs rules = Set.concat2 $ (uncurry firstLoop) <$> pairsOfRules
         where
             pairsOfRules = [(r1,r2) | r1 <- rules, r2 <- rules]
-            firstLoop r1 r2 = Set.catMaybes $ eitherToMaybe <$> secondLoop l1 l2 <$> hypergraphsToConsider
+            firstLoop r1 r2 = [(r1,r2,macspn) | macspn <- Set.catMaybes $ eitherToMaybe <$> secondLoop l1 l2 <$> hypergraphsToConsider]
                 where
                     l1 = targetHypergraph $ leftHandSideInputNodes r1
                     l2 = targetHypergraph $ leftHandSideInputNodes r2
-                    pairsOfVertices = [(v1,v2) | v1 <- vertices l1, v2 <- vertices l2]
-                    pairsOfHyperedges = edgesWithSameLabel l1 l2
+                    labelsOfHyperedges = [labelHyperedge e | e <- hyperedges l1] ||| [labelHyperedge e | e <- hyperedges l2]
+                    bisetsOfHypergraphsWithAGivenLabel = [([e | e <- hyperedges l1, labelHyperedge e == l],[e | e <- hyperedges l2, labelHyperedge e == l]) | l <- labelsOfHyperedges]
+                    matchings = combineDifferentMatchings $ uncurry enumerateMatchingOnBipartiteCompleteGraph <$> bisetsOfHypergraphsWithAGivenLabel
+                    pairOfHyperedgeToHyperedgeofPair (e1,e2) = hyperedge (idHyperedge e1, idHyperedge e2) (zip (sourceHyperedge e1) (sourceHyperedge e2)) (zip (targetHyperedge e1) (targetHyperedge e2)) (labelHyperedge e1)
                     completeHypergraph g = unsafeHypergraph (simplify $ vertices g ||| (set $ Set.concat [sourceHyperedge e ++ targetHyperedge e | e <- hyperedges g])) (hyperedges g)
-                    hypergraphsToConsider = [completeHypergraph (unsafeHypergraph vs es) | vs <- Set.powerSet pairsOfVertices, es <- Set.powerSet pairsOfHyperedges, not (Set.null vs && Set.null es)]
+                    hypergraphsToConsider = [completeHypergraph (unsafeHypergraph (set []) (pairOfHyperedgeToHyperedgeofPair <$> matching)) | matching <- matchings]
                     secondLoop l1 l2 g = candidateMACospan
                         where
                             leftProjectHyperedge e = hyperedge (fst $ idHyperedge e) (fst <$> sourceHyperedge e) (fst <$> targetHyperedge e) (labelHyperedge e)
@@ -492,11 +533,13 @@ where
                             leftComposite = unsafeHypergraphMorphism ((onVertices leftInjection) |.| (onVertices leftProjection)) ((onHyperedges leftInjection) |.| (onHyperedges leftProjection)) (targetHypergraph leftInjection)
                             rightComposite = unsafeHypergraphMorphism ((onVertices rightInjection) |.| (onVertices rightProjection)) ((onHyperedges rightInjection) |.| (onHyperedges rightProjection)) (targetHypergraph rightInjection)
                             
-                            coequalizer = targetHypergraph $ coequalize leftComposite rightComposite
+                            coequalizer = coequalize leftComposite rightComposite
+                            coequalizerHypergraph = targetHypergraph coequalizer
                             
-                            inDegreeZeroVertices = [v | v <- vertices coequalizer, inDegree coequalizer v == 0]
-                            outDegreeZeroVertices = [v | v <- vertices coequalizer, outDegree coequalizer v == 0]
-                            inInterface = unsafeHypergraphMorphism (memorizeFunction id inDegreeZeroVertices) (weakMap []) coequalizer
-                            outInterface = unsafeHypergraphMorphism (memorizeFunction id outDegreeZeroVertices) (weakMap []) coequalizer
+                            inDegreeZeroVertices = [v | v <- vertices coequalizerHypergraph, inDegree coequalizerHypergraph v == 0]
+                            outDegreeZeroVertices = [v | v <- vertices coequalizerHypergraph, outDegree coequalizerHypergraph v == 0]
+                            inInterface = unsafeHypergraphMorphism (memorizeFunction id inDegreeZeroVertices) (weakMap []) coequalizerHypergraph
+                            outInterface = unsafeHypergraphMorphism (memorizeFunction id outDegreeZeroVertices) (weakMap []) coequalizerHypergraph
                             candidateMACospan = maCospan inInterface outInterface
-                    
+                            
+                            
