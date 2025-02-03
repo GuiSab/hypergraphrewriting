@@ -232,4 +232,33 @@ main = do
     putStrLn $ Set.foldr (\str r -> r ++ "=====================================================\n\n" ++ str) "" [pprint 5 (targetHypergraph $ leftHandSideInputNodes r1) ++ "\n\n" ++ pprint 5 (targetHypergraph $ leftHandSideInputNodes r2) ++ "\n\n\n\n" ++ pprint 5 (underlyingHypergraph g) ++ "\n\n\n\n" | (r1,r2,g) <- precriticalpairs]
     
     
+    putStrLn $ "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+    
+    let Right nb1L = hypergraph (set [0 :: Int,1,2,3]) (set [hyperedge 'f' [0] [1,2] "alpha", hyperedge 'g' [1] [3] "gamma"])
+    let Right nb1Kin = hypergraph (set [0 :: Int]) (set ([] :: [Hyperedge Int Char String]))
+    let Right nb1Kout = hypergraph (set [2,3 :: Int]) (set ([] :: [Hyperedge Int Char String]))
+    let Right nb1R = hypergraph (set [0,1,2,3]) (set [hyperedge 'h' [0] [1,2] "xi", hyperedge 'i' [1] [3] "zeta"])
+    let Right nb1ain = hypergraphMorphism nb1Kin nb1L (weakMap [(0,0)]) (weakMap [])
+    let Right nb1aout = hypergraphMorphism nb1Kout nb1L (weakMap [(2,2),(3,3)]) (weakMap [])
+    let Right nb1bin =  hypergraphMorphism nb1Kin nb1R (weakMap [(0,0)]) (weakMap [])
+    let Right nb1bout =  hypergraphMorphism nb1Kout nb1R (weakMap [(2,2),(3,3)]) (weakMap [])
+    let Right nb1rr = leftConnectedMARewriteRule nb1ain nb1aout nb1bin nb1bout
+    
+    let Right nb2L = hypergraph (set [4 :: Int,5,6,7]) (set [hyperedge 'j' [4] [5] "gamma", hyperedge 'k' [5,6] [7] "beta"])
+    let Right nb2Kin = hypergraph (set [4,6 :: Int]) (set ([] :: [Hyperedge Int Char String]))
+    let Right nb2Kout = hypergraph (set [7 :: Int]) (set ([] :: [Hyperedge Int Char String]))
+    let Right nb2R = hypergraph (set [4 :: Int,5,6,7]) (set [hyperedge 'j' [4] [5] "zeta", hyperedge 'k' [5,6] [7] "upsilon"])
+    let Right nb2ain = hypergraphMorphism nb2Kin nb2L (weakMap [(4,4),(6,6)]) (weakMap [])
+    let Right nb2aout = hypergraphMorphism nb2Kout nb2L (weakMap [(7,7)]) (weakMap [])
+    let Right nb2bin =  hypergraphMorphism nb2Kin nb2R (weakMap [(4,4),(6,6)]) (weakMap [])
+    let Right nb2bout =  hypergraphMorphism nb2Kout nb2R (weakMap [(7,7)]) (weakMap [])
+    let Right nb2rr = leftConnectedMARewriteRule nb2ain nb2aout nb2bin nb2bout
+    
+    
+    let rules = set [nb1rr, nb2rr]
+    
+    let precriticalpairs = simplify $ enumeratePreCriticalPairs rules
+    
+    putStrLn $ Set.foldr (\str r -> r ++ "=====================================================\n\n" ++ str) "" [pprint 5 (targetHypergraph $ leftHandSideInputNodes r1) ++ "\n\n" ++ pprint 5 (targetHypergraph $ leftHandSideInputNodes r2) ++ "\n\n\n\n" ++ pprint 5 (underlyingHypergraph g) ++ "\n\n\n\n" | (r1,r2,g) <- precriticalpairs]
+    
     putStrLn "finished"

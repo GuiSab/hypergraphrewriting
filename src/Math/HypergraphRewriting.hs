@@ -511,10 +511,10 @@ where
                     l2 = targetHypergraph $ leftHandSideInputNodes r2
                     labelsOfHyperedges = [labelHyperedge e | e <- hyperedges l1] ||| [labelHyperedge e | e <- hyperedges l2]
                     bisetsOfHypergraphsWithAGivenLabel = [([e | e <- hyperedges l1, labelHyperedge e == l],[e | e <- hyperedges l2, labelHyperedge e == l]) | l <- labelsOfHyperedges]
-                    matchings = combineDifferentMatchings $ uncurry enumerateMatchingOnBipartiteCompleteGraph <$> bisetsOfHypergraphsWithAGivenLabel
+                    matchingsHyperedges = combineDifferentMatchings $ uncurry enumerateMatchingOnBipartiteCompleteGraph <$> bisetsOfHypergraphsWithAGivenLabel
                     pairOfHyperedgeToHyperedgeofPair (e1,e2) = hyperedge (idHyperedge e1, idHyperedge e2) (zip (sourceHyperedge e1) (sourceHyperedge e2)) (zip (targetHyperedge e1) (targetHyperedge e2)) (labelHyperedge e1)
                     completeHypergraph g = unsafeHypergraph (simplify $ vertices g ||| (set $ Set.concat [sourceHyperedge e ++ targetHyperedge e | e <- hyperedges g])) (hyperedges g)
-                    hypergraphsToConsider = [completeHypergraph (unsafeHypergraph (set []) (pairOfHyperedgeToHyperedgeofPair <$> matching)) | matching <- matchings]
+                    hypergraphsToConsider = [completeHypergraph (unsafeHypergraph (set []) (pairOfHyperedgeToHyperedgeofPair <$> matchingE)) | matchingE <- matchingsHyperedges]
                     secondLoop l1 l2 g = candidateMACospan
                         where
                             leftProjectHyperedge e = hyperedge (fst $ idHyperedge e) (fst <$> sourceHyperedge e) (fst <$> targetHyperedge e) (labelHyperedge e)
