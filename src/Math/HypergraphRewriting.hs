@@ -541,8 +541,8 @@ where
                             
                             i1 = inDegreeZeroVertices |&| (image $ (onVertices leftInjection) |.| (onVertices $ leftHandSideInputNodes r1))
                             i2 = inDegreeZeroVertices |&| (image $ (onVertices rightInjection) |.|(onVertices $ leftHandSideInputNodes r2))
-                            o1 = outDegreeZeroVertices |&| (image $ (onVertices leftInjection) |.| (onVertices $ leftHandSideInputNodes r1))
-                            o2 = outDegreeZeroVertices |&| (image $ (onVertices leftInjection) |.| (onVertices $ leftHandSideInputNodes r2))
+                            o1 = outDegreeZeroVertices |&| (image $ (onVertices leftInjection) |.| (onVertices $ leftHandSideOutputNodes r1))
+                            o2 = outDegreeZeroVertices |&| (image $ (onVertices rightInjection) |.| (onVertices $ leftHandSideOutputNodes r2))
                             
                             nodesMatchings = enumerateMatchingOnBipartiteCompleteGraph i1 o2 ||| enumerateMatchingOnBipartiteCompleteGraph i2 o1
                             
