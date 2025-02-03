@@ -505,7 +505,7 @@ where
     enumeratePreCriticalPairs rules = Set.concat2 $ (uncurry firstLoop) <$> pairsOfRules
         where
             pairsOfRules = [(r1,r2) | r1 <- rules, r2 <- rules]
-            firstLoop r1 r2 = [(r1,r2,macspn) | macspn <- Set.catMaybes $ eitherToMaybe <$> secondLoop l1 l2 <$> hypergraphsToConsider]
+            firstLoop r1 r2 = [(r1,r2,macspn) | macspn <- Set.catMaybes $ eitherToMaybe <$> (Set.concat2 $ secondLoop <$> hypergraphsToConsider)]
                 where
                     l1 = targetHypergraph $ leftHandSideInputNodes r1
                     l2 = targetHypergraph $ leftHandSideInputNodes r2
@@ -515,7 +515,7 @@ where
                     pairOfHyperedgeToHyperedgeofPair (e1,e2) = hyperedge (idHyperedge e1, idHyperedge e2) (zip (sourceHyperedge e1) (sourceHyperedge e2)) (zip (targetHyperedge e1) (targetHyperedge e2)) (labelHyperedge e1)
                     completeHypergraph g = unsafeHypergraph (simplify $ vertices g ||| (set $ Set.concat [sourceHyperedge e ++ targetHyperedge e | e <- hyperedges g])) (hyperedges g)
                     hypergraphsToConsider = [completeHypergraph (unsafeHypergraph (set []) (pairOfHyperedgeToHyperedgeofPair <$> matchingE)) | matchingE <- matchingsHyperedges]
-                    secondLoop l1 l2 g = candidateMACospan
+                    secondLoop g = thirdLoop coequalizerHypergraph <$> hypergraphsToGlueInterfaces
                         where
                             leftProjectHyperedge e = hyperedge (fst $ idHyperedge e) (fst <$> sourceHyperedge e) (fst <$> targetHyperedge e) (labelHyperedge e)
                             rightProjectHyperedge e = hyperedge (snd $ idHyperedge e) (snd <$> sourceHyperedge e) (snd <$> targetHyperedge e) (labelHyperedge e)
@@ -538,8 +538,37 @@ where
                             
                             inDegreeZeroVertices = [v | v <- vertices coequalizerHypergraph, inDegree coequalizerHypergraph v == 0]
                             outDegreeZeroVertices = [v | v <- vertices coequalizerHypergraph, outDegree coequalizerHypergraph v == 0]
-                            inInterface = unsafeHypergraphMorphism (memorizeFunction id inDegreeZeroVertices) (weakMap []) coequalizerHypergraph
-                            outInterface = unsafeHypergraphMorphism (memorizeFunction id outDegreeZeroVertices) (weakMap []) coequalizerHypergraph
-                            candidateMACospan = maCospan inInterface outInterface
+                            
+                            i1 = inDegreeZeroVertices |&| (image $ (onVertices leftInjection) |.| (onVertices $ leftHandSideInputNodes r1))
+                            i2 = inDegreeZeroVertices |&| (image $ (onVertices rightInjection) |.|(onVertices $ leftHandSideInputNodes r2))
+                            o1 = outDegreeZeroVertices |&| (image $ (onVertices leftInjection) |.| (onVertices $ leftHandSideInputNodes r1))
+                            o2 = outDegreeZeroVertices |&| (image $ (onVertices leftInjection) |.| (onVertices $ leftHandSideInputNodes r2))
+                            
+                            nodesMatchings = enumerateMatchingOnBipartiteCompleteGraph i1 o2 ||| enumerateMatchingOnBipartiteCompleteGraph i2 o1
+                            
+                            hypergraphsToGlueInterfaces = [unsafeHypergraph matchingN (set []) | matchingN <- nodesMatchings]
+                            
+                            thirdLoop s g' = candidateMACospan
+                                where
+                                    leftProjectHyperedge' e = hyperedge (fst $ idHyperedge e) (fst <$> sourceHyperedge e) (fst <$> targetHyperedge e) (labelHyperedge e)
+                                    rightProjectHyperedge' e = hyperedge (snd $ idHyperedge e) (snd <$> sourceHyperedge e) (snd <$> targetHyperedge e) (labelHyperedge e)
+                                    leftProjection' = unsafeHypergraphMorphism pv pe s
+                                        where
+                                            pv = memorizeFunction fst (vertices g')
+                                            pe = memorizeFunction leftProjectHyperedge' (hyperedges g')
+                                    rightProjection' = unsafeHypergraphMorphism pv pe s
+                                        where
+                                            pv = memorizeFunction snd (vertices g')
+                                            pe = memorizeFunction rightProjectHyperedge' (hyperedges g')
+                                            
+                                    coequalizer' = coequalize leftProjection' rightProjection'
+                                    coequalizerHypergraph' = targetHypergraph coequalizer'
+                                    
+                                    inDegreeZeroVertices' = [v | v <- vertices coequalizerHypergraph', inDegree coequalizerHypergraph' v == 0]
+                                    outDegreeZeroVertices' = [v | v <- vertices coequalizerHypergraph', outDegree coequalizerHypergraph' v == 0]
+                                    
+                                    inInterface = unsafeHypergraphMorphism (memorizeFunction id inDegreeZeroVertices') (weakMap []) coequalizerHypergraph'
+                                    outInterface = unsafeHypergraphMorphism (memorizeFunction id outDegreeZeroVertices') (weakMap []) coequalizerHypergraph'
+                                    candidateMACospan = maCospan inInterface outInterface
                             
                             
